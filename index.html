@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DataReport — Smart File Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Mono&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #1a1a2e;
+      --bg-2: #16213e;
+      --surface: rgba(255,255,255,0.03);
+      --surface-hover: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.08);
+      --text: #e8e8e8;
+      --text-muted: #6b7280;
+      --accent: #7c3aed;
+      --accent-2: #a78bfa;
+      --accent-glow: rgba(124,58,237,0.3);
+      --success: #10b981;
+      --error: #ef4444;
+      --radius: 20px;
+      --radius-sm: 12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+
+    /* Animated background */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 30% 30%, rgba(124,58,237,0.08) 0%, transparent 50%),
+                  radial-gradient(circle at 70% 70%, rgba(167,139,250,0.05) 0%, transparent 50%);
+      animation: bgFloat 20s ease-in-out infinite;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    @keyframes bgFloat {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      33% { transform: translate(2%, 2%) rotate(1deg); }
+      66% { transform: translate(-1%, 1%) rotate(-1deg); }
+    }
+
+    /* Main card */
+    .card {
+      background: var(--surface);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 48px;
+      width: 100%;
+      max-width: 480px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    }
+
+    /* Views */
+    .view {
+      display: none;
+      opacity: 0;
+      transform: translateY(20px);
+      animation: fadeUp 0.5s ease-out forwards;
+    }
+
+    .view.active { display: block; }
+
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Logo */
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .logo-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 8px 32px var(--accent-glow);
+      animation: logoFloat 3s ease-in-out infinite;
+    }
+
+    @keyframes logoFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+
+    .logo-text h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+    }
+
+    .logo-text p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Form elements */
+    .form-group {
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      letter-spacing: 0.3px;
+    }
+
+    input {
+      width: 100%;
+      height: 52px;
+      padding: 0 18px;
+      font-size: 15px;
+      font-family: inherit;
+      background: var(--surface-hover);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      transition: all 0.3s ease;
+      outline: none;
+    }
+
+    input::placeholder { color: var(--text-muted); }
+
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-glow);
+      background: var(--surface-hover);
+    }
+
+    /* Buttons */
+    button {
+      width: 100%;
+      height: 52px;
+      font-size: 15px;
+      font-weight: 500;
+      font-family: inherit;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    button::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transition: left 0.5s ease;
+    }
+
+    button:hover::before { left: 100%; }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px var(--accent-glow);
+    }
+
+    button:active { transform: translateY(0); }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    button:disabled::before { display: none; }
+
+    /* Link */
+    .link {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .link a {
+      color: var(--accent-2);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .link a:hover { color: var(--accent); }
+
+    /* Spinner */
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Upload area */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .upload-zone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--accent-glow), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent);
+      background: var(--surface-hover);
+    }
+
+    .upload-zone:hover::before, .upload-zone.dragover::before {
+      opacity: 1;
+    }
+
+    .upload-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      display: block;
+      animation: bounce 2s ease-in-out infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    .upload-text {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+
+    .upload-hint {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    #fileInput { display: none; }
+
+    /* Stats */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 24px 0;
+    }
+
+    .stat {
+      background: var(--surface-hover);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .stat:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 600;
+      font-family: 'Space Mono', monospace;
+      color: var(--accent-2);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Chart */
+    .chart-container {
+      background: var(--surface-hover);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin: 24px 0;
+      animation: fadeUp 0.6s ease-out;
+    }
+
+    /* History */
+    .history {
+      margin-top: 32px;
+    }
+
+    .history-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .history-item {
+      background: var(--surface-hover);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.3s ease;
+      animation: fadeUp 0.4s ease-out;
+    }
+
+    .history-item:hover {
+      border-color: var(--accent);
+      transform: translateX(4px);
+    }
+
+    .history-name {
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .history-date {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .history-status {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(16,185,129,0.1);
+      color: var(--success);
+      font-weight: 500;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+    }
+
+    .user-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .logout-btn {
+      width: auto;
+      height: 36px;
+      padding: 0 16px;
+      font-size: 13px;
+      background: var(--surface-hover);
+      border: 1px solid var(--border);
+    }
+
+    .logout-btn:hover {
+      border-color: var(--error);
+      color: var(--error);
+      box-shadow: none;
+    }
+
+    /* Toast */
+    .toast-container {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 14px 24px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 500;
+      color: white;
+      background: var(--success);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      animation: toastIn 0.3s ease-out;
+    }
+
+    .toast.error { background: var(--error); }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-muted);
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    /* Responsive */
+    @media (max-width: 520px) {
+      .card { padding: 32px 24px; }
+      .stats { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <!-- Login View -->
+    <div id="loginView" class="view active">
+      <div class="logo">
+        <div class="logo-icon">📊</div>
+        <div class="logo-text">
+          <h1>DataReport</h1>
+          <p>Smart file analysis</p>
+        </div>
+      </div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="loginEmail" placeholder="your@email.com" required>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="loginPassword" placeholder="••••••••" required>
+        </div>
+        <button type="submit" id="loginBtn">Sign In</button>
+      </form>
+      <p class="link">Don't have an account? <a href="#" id="showSignup">Create one</a></p>
+    </div>
+
+    <!-- Signup View -->
+    <div id="signupView" class="view">
+      <div class="logo">
+        <div class="logo-icon">📊</div>
+        <div class="logo-text">
+          <h1>DataReport</h1>
+          <p>Smart file analysis</p>
+        </div>
+      </div>
+      <form id="signupForm">
+        <div class="form-group">
+          <label>Name</label>
+          <input type="text" id="signupName" placeholder="Your name" required>
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="signupEmail" placeholder="your@email.com" required>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="signupPassword" placeholder="Min 4 characters" required>
+        </div>
+        <button type="submit" id="signupBtn">Create Account</button>
+      </form>
+      <p class="link">Already have an account? <a href="#" id="showLogin">Sign in</a></p>
+    </div>
+
+    <!-- Dashboard View -->
+    <div id="dashboardView" class="view">
+      <div class="header">
+        <div class="logo">
+          <div class="logo-icon">📊</div>
+          <div class="logo-text">
+            <h1>DataReport</h1>
+            <p id="welcomeText">Welcome back</p>
+          </div>
+        </div>
+        <div class="user-badge">
+          <div class="user-avatar" id="userAvatar">J</div>
+          <button class="logout-btn" id="logoutBtn">Sign Out</button>
+        </div>
+      </div>
+
+      <div class="upload-zone" id="uploadZone">
+        <span class="upload-icon">📁</span>
+        <p class="upload-text">Drop your file here</p>
+        <p class="upload-hint">or click to browse • CSV, XLSX supported</p>
+      </div>
+      <input type="file" id="fileInput" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+
+      <div id="results" style="display: none;">
+        <div class="stats" id="statsGrid"></div>
+        <div class="chart-container">
+          <canvas id="chartCanvas"></canvas>
+        </div>
+        <div class="history">
+          <p class="history-title">Recent Uploads</p>
+          <div class="history-list" id="historyList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    // =====================
+    // CONFIGURATION
+    // =====================
+    const N8N_WEBHOOK_URL = 'http://localhost:5678/webhook-test/datareport';
+    const GOOGLE_SHEET_ID = '1TUmZzyNa2TakpzoT8jsq-tzsD8zN-4Xsn8KfmkNFteg';
+
+    // =====================
+    // STATE
+    // =====================
+    let currentUser = null;
+    let currentChart = null;
+
+    // =====================
+    // DOM
+    // =====================
+    const loginView = document.getElementById('loginView');
+    const signupView = document.getElementById('signupView');
+    const dashboardView = document.getElementById('dashboardView');
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const results = document.getElementById('results');
+    const historyList = document.getElementById('historyList');
+    const toastContainer = document.getElementById('toastContainer');
+
+    // =====================
+    // INIT
+    // =====================
+    checkAuth();
+
+    // =====================
+    // AUTH
+    // =====================
+    function checkAuth() {
+      const saved = localStorage.getItem('datareport_user');
+      if (saved) {
+        currentUser = JSON.parse(saved);
+        showDashboard();
+      } else {
+        showView(loginView);
+      }
+    }
+
+    function showView(view) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      view.classList.add('active');
+    }
+
+    function showDashboard() {
+      document.getElementById('welcomeText').textContent = `Welcome, ${currentUser.name}`;
+      document.getElementById('userAvatar').textContent = (currentUser.name || 'U')[0].toUpperCase();
+      showView(dashboardView);
+      loadHistory();
+    }
+
+    // Switch auth views
+    document.getElementById('showSignup').addEventListener('click', e => { e.preventDefault(); showView(signupView); });
+    document.getElementById('showLogin').addEventListener('click', e => { e.preventDefault(); showView(loginView); });
+
+    // Login
+    loginForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+
+      setLoading(btn, true);
+
+      // Simulate login (replace with real n8n call)
+      await delay(800);
+
+      if (password.length >= 4) {
+        currentUser = { email, name: email.split('@')[0] };
+        localStorage.setItem('datareport_user', JSON.stringify(currentUser));
+        showDashboard();
+        showToast('Welcome back!');
+      } else {
+        showToast('Invalid credentials', true);
+      }
+
+      setLoading(btn, false);
+    });
+
+    // Signup
+    signupForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = document.getElementById('signupBtn');
+      const name = document.getElementById('signupName').value;
+      const email = document.getElementById('signupEmail').value;
+      const password = document.getElementById('signupPassword').value;
+
+      if (password.length < 4) {
+        showToast('Password must be at least 4 characters', true);
+        return;
+      }
+
+      setLoading(btn, true);
+      await delay(800);
+
+      currentUser = { email, name };
+      localStorage.setItem('datareport_user', JSON.stringify(currentUser));
+      showDashboard();
+      showToast('Account created!');
+
+      setLoading(btn, false);
+    });
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      localStorage.removeItem('datareport_user');
+      currentUser = null;
+      showView(loginView);
+      showToast('Signed out');
+    });
+
+    // =====================
+    // FILE UPLOAD
+    // =====================
+    uploadZone.addEventListener('click', () => fileInput.click());
+
+    uploadZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('dragover');
+    });
+
+    uploadZone.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) processFile(file);
+    });
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (file) processFile(file);
+    });
+
+    async function processFile(file) {
+      if (!file.name.endsWith('.csv') && !file.name.endsWith('.xlsx')) {
+        showToast('Please upload a CSV or Excel file', true);
+        return;
+      }
+
+      showToast('Processing file...');
+
+      const reader = new FileReader();
+      reader.onload = async e => {
+        const data = parseCSV(e.target.result);
+        displayResults(data, file.name);
+        await saveToHistory(file.name, data);
+      };
+      reader.readAsText(file);
+    }
+
+    function parseCSV(text) {
+      const lines = text.trim().split('\n');
+      if (lines.length < 2) return { error: 'File is empty or invalid' };
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      const rows = lines.slice(1).filter(l => l.trim());
+
+      // Calculate stats for numeric columns
+      const stats = {};
+      headers.forEach((header, i) => {
+        const values = rows.map(row => {
+          const cols = row.split(',');
+          return parseFloat(cols[i]?.trim());
+        }).filter(v => !isNaN(v));
+
+        if (values.length > 0) {
+          stats[header] = {
+            count: values.length,
+            sum: values.reduce((a, b) => a + b, 0),
+            avg: values.reduce((a, b) => a + b, 0) / values.length,
+            min: Math.min(...values),
+            max: Math.max(...values)
+          };
+        }
+      });
+
+      return {
+        columns: headers,
+        rowCount: rows.length,
+        stats,
+        preview: rows.slice(0, 3).map(row => row.split(','))
+      };
+    }
+
+    function displayResults(data, filename) {
+      results.style.display = 'block';
+
+      // Stats
+      const statsGrid = document.getElementById('statsGrid');
+      statsGrid.innerHTML = `
+        <div class="stat">
+          <div class="stat-value">${data.rowCount}</div>
+          <div class="stat-label">Rows</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">${data.columns.length}</div>
+          <div class="stat-label">Columns</div>
+        </div>
+      `;
+
+      // Stats for each numeric column
+      Object.entries(data.stats).forEach(([name, s]) => {
+        statsGrid.innerHTML += `
+          <div class="stat">
+            <div class="stat-value">${s.avg.toFixed(1)}</div>
+            <div class="stat-label">${name} avg</div>
+          </div>
+        `;
+      });
+
+      // Chart
+      renderChart(data);
+
+      // Animate results
+      results.animate([
+        { opacity: 0, transform: 'translateY(20px)' },
+        { opacity: 1, transform: 'translateY(0)' }
+      ], { duration: 400, easing: 'ease-out' });
+    }
+
+    function renderChart(data) {
+      const ctx = document.getElementById('chartCanvas').getContext('2d');
+
+      if (currentChart) currentChart.destroy();
+
+      const numericCols = Object.keys(data.stats);
+      if (numericCols.length === 0) return;
+
+      const col = numericCols[0];
+      const s = data.stats[col];
+
+      currentChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Min', 'Avg', 'Max'],
+          datasets: [{
+            label: col,
+            data: [s.min, s.avg, s.max],
+            backgroundColor: ['#7c3aed', '#a78bfa', '#c4b5fd'],
+            borderRadius: 8,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6b7280' } },
+            x: { grid: { display: false }, ticks: { color: '#6b7280' } }
+          }
+        }
+      });
+    }
+
+    // =====================
+    // HISTORY
+    // =====================
+    async function saveToHistory(filename, data) {
+      // Save to localStorage for demo
+      const history = JSON.parse(localStorage.getItem('datareport_history') || '[]');
+      history.unshift({
+        filename,
+        date: new Date().toISOString(),
+        rows: data.rowCount,
+        cols: data.columns.length
+      });
+      localStorage.setItem('datareport_history', JSON.stringify(history.slice(0, 10)));
+      loadHistory();
+    }
+
+    function loadHistory() {
+      const history = JSON.parse(localStorage.getItem('datareport_history') || '[]');
+
+      if (history.length === 0) {
+        historyList.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <p>No uploads yet</p>
+          </div>
+        `;
+        return;
+      }
+
+      historyList.innerHTML = history.map((h, i) => `
+        <div class="history-item" style="animation-delay: ${i * 50}ms">
+          <div>
+            <div class="history-name">${h.filename}</div>
+            <div class="history-date">${new Date(h.date).toLocaleDateString()} • ${h.rows} rows</div>
+          </div>
+          <span class="history-status">Done</span>
+        </div>
+      `).join('');
+    }
+
+    // =====================
+    // HELPERS
+    // =====================
+    function setLoading(btn, loading) {
+      if (loading) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = btn.id === 'loginBtn' ? 'Sign In' : 'Create Account';
+      }
+    }
+
+    function showToast(message, isError = false) {
+      const toast = document.createElement('div');
+      toast.className = `toast${isError ? ' error' : ''}`;
+      toast.textContent = message;
+      toastContainer.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+  </script>
+</body>
+</html>

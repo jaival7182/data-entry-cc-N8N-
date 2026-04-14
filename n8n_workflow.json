@@ -1,0 +1,80 @@
+{
+  "name": "DataReport Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "datareport"
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookPath": "datareport"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse incoming data\nconst data = $input.all()[0].json;\n\n// Parse CSV if string\nlet parsed = data;\nif (typeof data.file === 'string') {\n  const lines = data.file.split('\\n').filter(l => l.trim());\n  const headers = lines[0].split(',').map(h => h.trim().replace(/\"/g, ''));\n  const rows = lines.slice(1);\n  \n  parsed = {\n    email: data.email,\n    name: data.name,\n    filename: data.filename,\n    headers,\n    rowCount: rows.length\n  };\n}\n\n// Calculate stats\nconst stats = {};\nparsed.headers?.forEach((header, i) => {\n  const values = rows?.map(row => {\n    const cols = row.split(',');\n    return parseFloat(cols[i]?.trim());\n  }).filter(v => !isNaN(v)) || [];\n  \n  if (values.length > 0) {\n    stats[header] = {\n      count: values.length,\n      sum: parseFloat(values.reduce((a, b) => a + b, 0).toFixed(2)),\n      avg: parseFloat((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)),\n      min: parseFloat(Math.min(...values).toFixed(2)),\n      max: parseFloat(Math.max(...values).toFixed(2))\n    };\n  }\n});\n\nreturn [{\n  json: {\n    email: parsed.email,\n    name: parsed.name,\n    filename: parsed.filename,\n    rowCount: parsed.rowCount,\n    headers: parsed.headers,\n    stats,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "parse",
+      "name": "Parse Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://quickchart.io/chart?c={\"type\":\"bar\",\"data\":{\"labels\":[\"Min\",\"Avg\",\"Max\"],\"datasets\":[{\"data\":[{{$json.stats[\"\" + Object.keys($json.stats)[0] + \"\"].min}},{{$json.stats[\"\" + Object.keys($json.stats)[0] + \"\"].avg}},{{$json.stats[\"\" + Object.keys($json.stats)[0] + \"\"].max}}],\"backgroundColor\":[\"#7c3aed\",\"#a78bfa\",\"#c4b5fd\"]}]},\"options\":{\"plugins\":{\"legend\":{\"display\":false}},\"scales\":{\"y\":{\"grid\":{\"color\":\"#e5e5e5\"}},\"x\":{\"grid\":{\"display\":false}}}}}&width=600&height=400&format=png"
+      },
+      "id": "chart",
+      "name": "Generate Chart",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID_HERE",
+        "range": "A1",
+        "options": {
+          "valueInputMode": "USER_ENTERED"
+        }
+      },
+      "id": "sheets",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1000, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": "YOUR_GOOGLE_CREDENTIALS"
+      }
+    },
+    {
+      "parameters": {
+        "email": "={{$json.email}}",
+        "subject": "Your DataReport is ready! 📊",
+        "body": "<h2>Hello {{$json.name}},</h2><p>Your file <strong>{{$json.filename}}</strong> has been processed.</p><p><strong>Summary:</strong></p><ul><li>Rows: {{$json.rowCount}}</li><li>Columns: {{$json.headers?.length || 0}}</li></ul><p><strong>Statistics:</strong></p>{{$json.statsList}}<p>Best regards,<br>DataReport Team</p>",
+        "options": {}
+      },
+      "id": "email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1000, 500]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Parse Data", "type": "main", "index": 0 }]]
+    },
+    "Parse Data": {
+      "main": [
+        [{ "node": "Generate Chart", "type": "main", "index": 0 }],
+        [{ "node": "Save to Google Sheets", "type": "main", "index": 0 }],
+        [{ "node": "Send Email", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}
